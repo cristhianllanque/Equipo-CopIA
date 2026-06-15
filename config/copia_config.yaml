@@ -1,0 +1,11 @@
+camera_index: 1
+camera_type: rgb
+use_eye_classifier: true
+use_perclos: true
+use_voice: true
+use_adaptive_profile: true
+ear_threshold_default: 0.18
+perclos_window_seconds: 60
+risk_threshold_fatigue: 40
+risk_threshold_warning: 65
+risk_threshold_critical: 88

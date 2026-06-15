@@ -1,0 +1,17 @@
+numpy>=1.22,<2.0
+opencv-python>=4.8
+mediapipe>=0.10.8,<0.11
+protobuf>=3.20,<4
+scipy>=1.10
+pandas>=2.0
+matplotlib>=3.7
+pyyaml>=6.0
+tqdm>=4.65
+Pillow>=10.0
+pyttsx3>=2.90
+pygame>=2.5
+imutils>=0.5.4
+tensorflow>=2.13,<2.14
+gTTS>=2.3
+SpeechRecognition>=3.10
+PyAudio>=0.2.13

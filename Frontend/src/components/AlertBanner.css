@@ -1,0 +1,50 @@
+.alert-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+.banner-warning {
+  background-color: rgba(255, 234, 0, 0.15);
+  border: 1px solid var(--risk-medium);
+  color: var(--risk-medium);
+}
+
+.banner-danger {
+  background-color: rgba(255, 145, 0, 0.15);
+  border: 1px solid var(--risk-high);
+  color: var(--risk-high);
+}
+
+.banner-critical {
+  background-color: rgba(255, 23, 68, 0.2);
+  border: 1px solid var(--risk-critical);
+  color: var(--risk-critical);
+  animation: pulse-critical 1.5s infinite;
+}
+
+.alert-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.alert-content h4 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+
+.alert-content p {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}

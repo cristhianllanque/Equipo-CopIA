@@ -1,0 +1,38 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+
+# Data and models (too large for git)
+data/logs/
+data/processed/
+models_store/**/*.h5
+models_store/**/*.tflite
+models_store/checkpoints/
+
+# Temporary files
+temp_voice*.mp3
+temp_voice/
+scratch/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+__pycache__/
+Frontend/node_modules/
+data/logs/
