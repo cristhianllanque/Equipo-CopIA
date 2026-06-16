@@ -1,5 +1,6 @@
 import os
 import time
+import hashlib
 from app.core.database import SessionLocal
 from app.models.db_models import Conductor, PerfilCalibracion, SesionConduccion
 from datetime import datetime
@@ -14,7 +15,15 @@ class DriverProfileManager:
         try:
             conductor = db.query(Conductor).filter(Conductor.id == self.conductor_id).first()
             if not conductor:
-                conductor = Conductor(id=self.conductor_id, nombre="Conductor Predeterminado")
+                pw_hash = hashlib.sha256("admin123".encode()).hexdigest()
+                conductor = Conductor(
+                    id=self.conductor_id, 
+                    nombre="Conductor Predeterminado",
+                    username="admin",
+                    password_hash=pw_hash,
+                    vehiculo="Camión Test",
+                    ruta_asignada="Ruta Local"
+                )
                 db.add(conductor)
                 db.commit()
         finally:

@@ -1,10 +1,39 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-veloz-900: #0f172a;
+  --color-veloz-800: #1e293b;
+  --color-veloz-700: #334155;
+  --color-veloz-accent: #0ea5e9;
+  --color-veloz-warning: #f59e0b;
+  --color-veloz-danger: #ef4444;
+  --color-copia-green: #10b981;
+}
 
 body {
-  background-color: #0f172a; /* slate-900 */
-  color: #f8fafc; /* slate-50 */
+  background-color: var(--color-veloz-900);
+  color: #f8fafc;
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.glass-panel {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-veloz-700);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-veloz-accent);
 }

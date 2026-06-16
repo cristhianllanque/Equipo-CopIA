@@ -1,14 +1,12 @@
-import cv2
-import yaml
-import os
 import logging
 import asyncio
-from fastapi import FastAPI, BackgroundTasks
-from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
+from fastapi import FastAPI, BackgroundTasks, Query
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.copia_system import CopIASystem
 import uvicorn
-from contextlib import asynccontextmanager
+from pydantic import BaseModel
+import hashlib
+from datetime import datetime
 
 # Configurar logging
 logging.basicConfig(
@@ -16,44 +14,11 @@ logging.basicConfig(
     format="[%(levelname)s] %(name)s: %(message)s"
 )
 
-# Variables globales para el estado
-system = None
-cap = None
-latest_log_data = {
-    "risk_score": 0, "alert_level": 0, "event_type": "normal",
-    "explanation": "Iniciando...", "ear": 0, "mar": 0, "perclos": 0, "pitch": 0,
-    "eye_closed_prob": 0
-}
-latest_frame_jpg = None
-is_running = False
+# Base de datos local en memoria (caché) para la telemetría en tiempo real
+# Formato: { conductor_id: { "log_data": {...}, "snapshot_b64": "...", "last_seen": timestamp } }
+fleet_status = {}
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global system, cap, is_running
-    config_path = "config/copia_config.yaml"
-    
-    system = CopIASystem(config_path)
-    config = system.config
-    
-    camera_index = config.get("camera_index", 0)
-    cap = cv2.VideoCapture(camera_index)
-    
-    if not cap.isOpened():
-        logging.error(f"No se pudo abrir la cámara {camera_index}")
-    else:
-        logging.info("Cámara y CopIASystem inicializados correctamente.")
-        is_running = True
-        
-    yield
-    
-    is_running = False
-    if system:
-        system.shutdown()
-    if cap:
-        cap.release()
-    logging.info("Sistema apagado de forma segura.")
-
-app = FastAPI(title="CopIA API", description="API para el sistema de asistencia CopIA", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="CopIA Cloud Server", description="Servidor central para recepción de telemetría IoT", version="2.0.0")
 
 # Habilitar CORS
 app.add_middleware(
@@ -64,94 +29,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def draw_ui(frame, data, profile_ready, calib_progress):
-    color_text = (255, 255, 255)
-    
-    # Colores según riesgo
-    risk = data.get("risk_score", 0)
-    if risk < 30:
-        risk_color = (0, 255, 0) # Verde
-    elif risk < 55:
-        risk_color = (0, 255, 255) # Amarillo
-    elif risk < 75:
-        risk_color = (0, 165, 255) # Naranja
-    else:
-        risk_color = (0, 0, 255) # Rojo
-
-    y = 40
-    cv2.putText(frame, f"EAR: {data.get('ear', 0):.3f}", (20, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_text, 2)
-    y += 30
-    cv2.putText(frame, f"MAR: {data.get('mar', 0):.3f}", (20, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_text, 2)
-    y += 30
-    cv2.putText(frame, f"PERCLOS: {data.get('perclos', 0)*100:.2f}%", (20, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_text, 2)
-    y += 30
-    cv2.putText(frame, f"PITCH: {data.get('pitch', 0):.1f}", (20, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_text, 2)
-    
-    # Barra de Riesgo
-    y += 40
-    bar_y = y
-    cv2.rectangle(frame, (20, bar_y), (220, bar_y + 30), (50, 50, 50), -1)
-    cv2.rectangle(frame, (20, bar_y), (20 + int(risk * 2), bar_y + 30), risk_color, -1)
-    cv2.putText(frame, f"RISK: {risk:.1f}", (230, bar_y + 22), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
-    
-    y = bar_y + 60
-    cv2.putText(frame, f"LEVEL: {data.get('alert_level', 0)}", (20, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
-    y += 30
-    cv2.putText(frame, f"EVENT: {data.get('event_type', 'normal').upper()}", (20, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color_text, 2)
-    
-    # Explicación
-    cv2.putText(frame, f"MSG: {data.get('explanation', '')}", (20, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
-
-    if not profile_ready:
-        prog = int(calib_progress * 100)
-        cv2.putText(frame, f"CALIBRANDO: {prog}%", (frame.shape[1] - 250, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-async def generate_frames():
-    global latest_log_data, latest_frame_jpg, is_running
-    
-    while is_running and cap is not None and cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            await asyncio.sleep(0.01)
-            continue
-
-        processed_frame, log_data = system.process_frame(frame)
-        
-        if log_data:
-            latest_log_data = log_data
-            draw_ui(processed_frame, log_data, system.profile.get("initialized", False), system.calibrator.progress())
-
-        # Codificar a JPEG
-        ret, buffer = cv2.imencode('.jpg', processed_frame)
-        if ret:
-            latest_frame_jpg = buffer.tobytes()
-            # Formato multipart para stream de video
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + latest_frame_jpg + b'\r\n')
-        
-        # Pequeño sleep para no bloquear el event loop por completo
-        await asyncio.sleep(0.01)
-
 @app.get("/", response_class=HTMLResponse)
 def read_root():
     return """
     <html>
         <head>
-            <title>CopIA API</title>
+            <title>CopIA Cloud Server</title>
             <style>
                 body { font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #1e1e1e; color: #fff; }
-                h1 { color: #4CAF50; }
-                a { color: #4CAF50; text-decoration: none; }
+                h1 { color: #0ea5e9; }
+                a { color: #0ea5e9; text-decoration: none; }
                 a:hover { text-decoration: underline; }
             </style>
         </head>
         <body>
-            <h1>CopIA AI Engine (Online)</h1>
-            <p>El motor de Inteligencia Artificial está corriendo de fondo.</p>
+            <h1>Transportes Veloz - CopIA Cloud API</h1>
+            <p>Servidor central recibiendo telemetría de la flota.</p>
             <p><a href="/docs" target="_blank">Ver Documentación de la API (Swagger)</a></p>
-            <p><a href="/video_feed" target="_blank">Ver Stream de Cámara (Video en Vivo)</a></p>
-            <p><a href="/api/status" target="_blank">Ver Estado (JSON en Vivo)</a></p>
-            <p><a href="/api/profile" target="_blank">Ver Perfil Calibrado</a></p>
         </body>
     </html>
     """
@@ -159,46 +53,230 @@ def read_root():
 from app.core.database import SessionLocal
 from app.models.db_models import Conductor, SesionConduccion, EventoFatiga
 
-@app.get("/api/status")
-def get_status():
-    global latest_log_data
-    return JSONResponse(content=latest_log_data)
+# --- MODELOS PYDANTIC ---
+class ConductorCreate(BaseModel):
+    nombre: str
+    username: str
+    password: str
+    vehiculo: str
+    ruta_asignada: str = None
+    foto_url: str = None
+    vehiculo_foto_url: str = None
 
-@app.get("/api/profile")
-def get_profile():
-    global system
-    if system and system.profile:
-        return JSONResponse(content=system.profile)
-    return JSONResponse(content={"initialized": False})
+class RutaCreate(BaseModel):
+    origen: str
+    destino: str
+
+class StartTripPayload(BaseModel):
+    conductor_id: int
+    ruta_id: int
+
+class AuthLogin(BaseModel):
+    username: str
+    password: str
+
+class TelemetryPayload(BaseModel):
+    conductor_id: int
+    log_data: dict
+    snapshot_b64: str = None  # Imagen JPG en base64
+
+# --- ENDPOINTS GESTIÓN DE FLOTA ---
 
 @app.get("/api/conductores")
 def get_conductores():
     db = SessionLocal()
     try:
         conductores = db.query(Conductor).all()
-        return [{"id": c.id, "nombre": c.nombre, "fecha_registro": c.fecha_registro.isoformat()} for c in conductores]
+        return [{
+            "id": c.id, 
+            "nombre": c.nombre, 
+            "username": c.username,
+            "vehiculo": c.vehiculo,
+            "ruta_asignada": c.ruta_asignada,
+            "foto_url": c.foto_url,
+            "vehiculo_foto_url": c.vehiculo_foto_url,
+            "estado": c.estado,
+            "fecha_registro": c.fecha_registro.isoformat()
+        } for c in conductores]
     finally:
         db.close()
 
-@app.get("/api/sesiones")
-def get_sesiones():
+@app.post("/api/conductores")
+def create_conductor(data: ConductorCreate):
     db = SessionLocal()
     try:
-        sesiones = db.query(SesionConduccion).order_by(SesionConduccion.inicio_sesion.desc()).limit(20).all()
-        return [{
-            "id": s.id, 
-            "conductor_id": s.conductor_id, 
-            "inicio_sesion": s.inicio_sesion.isoformat() if s.inicio_sesion else None,
-            "fin_sesion": s.fin_sesion.isoformat() if s.fin_sesion else None
-        } for s in sesiones]
+        pw_hash = hashlib.sha256(data.password.encode()).hexdigest()
+        new_driver = Conductor(
+            nombre=data.nombre,
+            username=data.username,
+            password_hash=pw_hash,
+            vehiculo=data.vehiculo,
+            ruta_asignada=data.ruta_asignada,
+            foto_url=data.foto_url,
+            vehiculo_foto_url=data.vehiculo_foto_url
+        )
+        db.add(new_driver)
+        db.commit()
+        db.refresh(new_driver)
+        return {"id": new_driver.id, "nombre": new_driver.nombre, "status": "created"}
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(status_code=400, content={"error": str(e)})
     finally:
         db.close()
+
+@app.post("/api/auth/conductor")
+def auth_conductor(data: AuthLogin):
+    db = SessionLocal()
+    try:
+        driver = db.query(Conductor).filter(Conductor.username == data.username).first()
+        if not driver:
+            return JSONResponse(status_code=401, content={"error": "Credenciales inválidas"})
+        
+        pw_hash = hashlib.sha256(data.password.encode()).hexdigest()
+        if driver.password_hash != pw_hash:
+            return JSONResponse(status_code=401, content={"error": "Credenciales inválidas"})
+
+        return {
+            "success": True, 
+            "conductor_id": driver.id, 
+            "nombre": driver.nombre,
+            "vehiculo": driver.vehiculo
+        }
+    finally:
+        db.close()
+
+@app.post("/api/trip/start")
+def start_trip(data: StartTripPayload):
+    db = SessionLocal()
+    try:
+        sesion = SesionConduccion(
+            conductor_id=data.conductor_id,
+            ruta_id=data.ruta_id,
+            inicio_sesion=datetime.utcnow()
+        )
+        db.add(sesion)
+        db.commit()
+        return {"success": True, "sesion_id": sesion.id}
+    finally:
+        db.close()
+
+from app.models.db_models import Ruta
+
+@app.get("/api/rutas")
+def get_rutas():
+    db = SessionLocal()
+    try:
+        rutas = db.query(Ruta).all()
+        return [{"id": r.id, "origen": r.origen, "destino": r.destino, "estado": r.estado} for r in rutas]
+    finally:
+        db.close()
+
+@app.post("/api/rutas")
+def create_ruta(data: RutaCreate):
+    db = SessionLocal()
+    try:
+        nueva_ruta = Ruta(origen=data.origen, destino=data.destino)
+        db.add(nueva_ruta)
+        db.commit()
+        db.refresh(nueva_ruta)
+        return {"id": nueva_ruta.id, "origen": nueva_ruta.origen, "destino": nueva_ruta.destino}
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    finally:
+        db.close()
+
+# --- ENDPOINTS TELEMETRÍA (IoT Edge) ---
+
+@app.post("/api/telemetry")
+def receive_telemetry(payload: TelemetryPayload):
+    """
+    Recibe la telemetría enviada por la Raspberry Pi del camión.
+    """
+    global fleet_status
+    cid = payload.conductor_id
+    
+    fleet_status[cid] = {
+        "log_data": payload.log_data,
+        "snapshot_b64": payload.snapshot_b64,
+        "last_seen": datetime.utcnow().isoformat()
+    }
+
+    # Si hay un evento crítico, lo guardamos en la base de datos central
+    if payload.log_data.get("alert_level", 0) > 0:
+        db = SessionLocal()
+        try:
+            # Buscamos la última sesión activa del conductor
+            sesion = db.query(SesionConduccion).filter(
+                SesionConduccion.conductor_id == cid, 
+                SesionConduccion.fin_sesion == None
+            ).order_by(SesionConduccion.id.desc()).first()
+            
+            if sesion:
+                evento = EventoFatiga(
+                    sesion_id=sesion.id,
+                    tipo_evento=payload.log_data.get("event_type", "alerta"),
+                    nivel_riesgo=payload.log_data.get("risk_score", 0),
+                    ear_registrado=payload.log_data.get("ear", 0),
+                    mar_registrado=payload.log_data.get("mar", 0)
+                )
+                db.add(evento)
+                db.commit()
+        finally:
+            db.close()
+
+    return {"status": "ok"}
+
+@app.get("/api/status")
+def get_status(conductor_id: int = Query(None)):
+    """
+    El Dashboard consulta este endpoint para leer la telemetría en vivo de un conductor.
+    """
+    global fleet_status
+    if conductor_id is None:
+        return JSONResponse(status_code=400, content={"error": "Falta conductor_id"})
+    
+    status = fleet_status.get(conductor_id, None)
+    if not status:
+        return JSONResponse(content={"offline": True})
+    status_no_img = {k: v for k, v in status.items() if k != "snapshot_b64"}
+    return JSONResponse(content=status_no_img)
+
+import asyncio
+from fastapi.responses import StreamingResponse
+import base64
+
+async def generate_mjpeg_stream(conductor_id: int):
+    global fleet_status
+    last_b64 = None
+    while True:
+        status = fleet_status.get(conductor_id)
+        if status and status.get("snapshot_b64"):
+            # Enviar el frame solo si es diferente al anterior (nuevo snapshot)
+            if status["snapshot_b64"] != last_b64:
+                last_b64 = status["snapshot_b64"]
+                try:
+                    frame_bytes = base64.b64decode(last_b64)
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                except:
+                    pass
+        await asyncio.sleep(0.03)
+
+@app.get("/api/video_feed")
+def video_feed(conductor_id: int = Query(...)):
+    return StreamingResponse(generate_mjpeg_stream(conductor_id), media_type="multipart/x-mixed-replace; boundary=frame")
 
 @app.get("/api/eventos")
-def get_eventos():
+def get_eventos(conductor_id: int = Query(None)):
     db = SessionLocal()
     try:
-        eventos = db.query(EventoFatiga).order_by(EventoFatiga.timestamp.desc()).limit(50).all()
+        query = db.query(EventoFatiga).join(SesionConduccion)
+        if conductor_id:
+            query = query.filter(SesionConduccion.conductor_id == conductor_id)
+            
+        eventos = query.order_by(EventoFatiga.timestamp.desc()).limit(50).all()
         return [{
             "id": e.id,
             "sesion_id": e.sesion_id,
@@ -211,9 +289,37 @@ def get_eventos():
     finally:
         db.close()
 
-@app.get("/video_feed")
-def video_feed():
-    return StreamingResponse(generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+from sqlalchemy import func
+
+@app.get("/api/analytics")
+def get_analytics():
+    db = SessionLocal()
+    try:
+        # Riesgo promedio por conductor
+        conductor_riesgo = db.query(
+            Conductor.nombre,
+            func.count(EventoFatiga.id).label("total_eventos"),
+            func.avg(EventoFatiga.nivel_riesgo).label("riesgo_promedio")
+        ).join(SesionConduccion, Conductor.id == SesionConduccion.conductor_id)\
+         .join(EventoFatiga, SesionConduccion.id == EventoFatiga.sesion_id)\
+         .group_by(Conductor.id).all()
+
+        ranking_conductores = [{
+            "nombre": c.nombre,
+            "total_eventos": c.total_eventos,
+            "riesgo_promedio": round(c.riesgo_promedio, 2) if c.riesgo_promedio else 0
+        } for c in conductor_riesgo]
+
+        # Total de eventos hoy
+        hoy = datetime.utcnow().date()
+        total_hoy = db.query(EventoFatiga).filter(func.date(EventoFatiga.timestamp) == hoy).count()
+
+        return {
+            "ranking_conductores": ranking_conductores,
+            "total_eventos_hoy": total_hoy
+        }
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     uvicorn.run("api_main:app", host="0.0.0.0", port=8000, reload=False)

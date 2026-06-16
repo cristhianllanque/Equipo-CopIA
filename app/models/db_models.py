@@ -3,11 +3,26 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
 
+class Ruta(Base):
+    __tablename__ = "rutas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    origen = Column(String(100), nullable=False)
+    destino = Column(String(100), nullable=False)
+    estado = Column(String(20), default="activa") # activa, inactiva
+
 class Conductor(Base):
     __tablename__ = "conductores"
 
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), nullable=False)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    vehiculo = Column(String(100))
+    ruta_asignada = Column(String(255))
+    foto_url = Column(String(255), nullable=True) # Foto del rostro
+    vehiculo_foto_url = Column(String(255), nullable=True) # Foto del camión
+    estado = Column(String(20), default="inactivo") # inactivo, en_ruta, descanso
     fecha_registro = Column(DateTime, default=datetime.utcnow)
 
     # Relaciones
@@ -35,10 +50,12 @@ class SesionConduccion(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     conductor_id = Column(Integer, ForeignKey("conductores.id"))
+    ruta_id = Column(Integer, ForeignKey("rutas.id"), nullable=True)
     inicio_sesion = Column(DateTime, default=datetime.utcnow)
     fin_sesion = Column(DateTime, nullable=True)
 
     conductor = relationship("Conductor", back_populates="sesiones")
+    ruta = relationship("Ruta")
     eventos = relationship("EventoFatiga", back_populates="sesion")
 
 class EventoFatiga(Base):

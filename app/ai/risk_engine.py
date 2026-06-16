@@ -21,8 +21,8 @@ class ContinuousRiskEngine:
             "ear_warning": round(ear_warning, 3),
             "ear_critical": round(ear_critical, 3),
             "mar_yawn": 0.80,
-            "pitch_down_delta": 100.0,
-            "yaw_distraction": 42.0
+            "pitch_down_delta": 110.0,
+            "yaw_distraction": 50.0
         }
         return thresholds
 
@@ -31,9 +31,9 @@ class ContinuousRiskEngine:
         risk_score = 0
         
         # 1. AGACHARSE (CRÍTICO)
-        if pitch_counter > 50:
+        if pitch_counter > 70:
             return 100, 3, "critical", "Somnolencia: Cabeza caída."
-        elif pitch_counter > 20:
+        elif pitch_counter > 30:
             risk_score += 40
 
         # 2. OJOS
@@ -45,7 +45,7 @@ class ContinuousRiskEngine:
             risk_score += 25
 
         # 3. DISTRACCIÓN
-        if yaw_counter > 60:
+        if yaw_counter > 90:
             return 70, 2, "distraction", "¡Vista al frente!"
 
         if yawning:
