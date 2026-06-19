@@ -5,13 +5,17 @@ import requests
 import time
 import getpass
 import logging
+import os
+from dotenv import load_dotenv
 import concurrent.futures
 from app.core.copia_system import CopIASystem
+
+load_dotenv()
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] CopIA Edge: %(message)s")
 
-SERVER_URL = "http://localhost:8000"
+SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8000")
 
 def encode_image_base64(frame):
     # Aumentamos la resolución y calidad para que sea más nítido en el Dashboard
@@ -69,7 +73,7 @@ def telemetry_sender_worker():
 def run_edge_client(conductor_id, sesion_id):
     global latest_payload
     logging.info("Inicializando Motor de IA CopIA...")
-    system = CopIASystem("config/copia_config.yaml")
+    system = CopIASystem("config/copia_config.yaml", edge_mode=True)
     camera_index = system.config.get("camera_index", 1)
     
     cap = cv2.VideoCapture(camera_index)

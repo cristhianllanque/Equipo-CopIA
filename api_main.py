@@ -78,7 +78,19 @@ class AuthLogin(BaseModel):
 class TelemetryPayload(BaseModel):
     conductor_id: int
     log_data: dict
+    lat: float = None
+    lng: float = None
     snapshot_b64: str = None  # Imagen JPG en base64
+
+class EndTripPayload(BaseModel):
+    conductor_id: int
+
+class PerfilUpdate(BaseModel):
+    conductor_id: int
+    ear_baseline: float = None
+    mar_baseline: float = None
+    pitch_baseline: float = None
+    yaw_baseline: float = None
 
 # --- ENDPOINTS GESTIÓN DE FLOTA ---
 
@@ -161,6 +173,36 @@ def start_trip(data: StartTripPayload):
     finally:
         db.close()
 
+@app.post("/api/trip/end")
+def end_trip(data: EndTripPayload):
+    db = SessionLocal()
+    try:
+        # Encontrar la sesión activa del conductor
+        sesion = db.query(SesionConduccion).filter(
+            SesionConduccion.conductor_id == data.conductor_id,
+            SesionConduccion.fin_sesion == None
+        ).order_by(SesionConduccion.id.desc()).first()
+        
+        if not sesion:
+            return JSONResponse(status_code=400, content={"error": "No hay sesión activa para este conductor"})
+        
+        sesion.fin_sesion = datetime.utcnow()
+        
+        # Calcular eventos
+        eventos = db.query(EventoFatiga).filter(EventoFatiga.sesion_id == sesion.id).all()
+        total_eventos = len(eventos)
+        avg_risk = sum([e.nivel_riesgo for e in eventos]) / total_eventos if total_eventos > 0 else 0
+        
+        db.commit()
+        return {
+            "success": True, 
+            "sesion_id": sesion.id, 
+            "total_eventos": total_eventos, 
+            "riesgo_promedio": round(avg_risk, 2)
+        }
+    finally:
+        db.close()
+
 from app.models.db_models import Ruta
 
 @app.get("/api/rutas")
@@ -199,6 +241,8 @@ def receive_telemetry(payload: TelemetryPayload):
     
     fleet_status[cid] = {
         "log_data": payload.log_data,
+        "lat": payload.lat,
+        "lng": payload.lng,
         "snapshot_b64": payload.snapshot_b64,
         "last_seen": datetime.utcnow().isoformat()
     }
@@ -240,7 +284,13 @@ def get_status(conductor_id: int = Query(None)):
     status = fleet_status.get(conductor_id, None)
     if not status:
         return JSONResponse(content={"offline": True})
+    
+    # Inyectar lat/lng dentro de log_data para compatibilidad fácil en el frontend
     status_no_img = {k: v for k, v in status.items() if k != "snapshot_b64"}
+    if "log_data" in status_no_img:
+        status_no_img["log_data"]["lat"] = status_no_img.get("lat")
+        status_no_img["log_data"]["lng"] = status_no_img.get("lng")
+
     return JSONResponse(content=status_no_img)
 
 import asyncio
@@ -320,6 +370,96 @@ def get_analytics():
         }
     finally:
         db.close()
+
+from app.models.db_models import PerfilCalibracion
+
+@app.get("/api/config/perfil")
+def get_perfil(conductor_id: int = Query(...)):
+    db = SessionLocal()
+    try:
+        perfil = db.query(PerfilCalibracion).filter(PerfilCalibracion.conductor_id == conductor_id).first()
+        if not perfil:
+            return JSONResponse(status_code=404, content={"error": "Perfil no encontrado"})
+        return {
+            "ear_baseline": perfil.ear_baseline,
+            "mar_baseline": perfil.mar_baseline,
+            "pitch_baseline": perfil.pitch_baseline,
+            "yaw_baseline": perfil.yaw_baseline,
+            "initialized": perfil.initialized
+        }
+    finally:
+        db.close()
+
+@app.post("/api/config/perfil")
+def update_perfil(data: PerfilUpdate):
+    db = SessionLocal()
+    try:
+        perfil = db.query(PerfilCalibracion).filter(PerfilCalibracion.conductor_id == data.conductor_id).first()
+        if not perfil:
+            perfil = PerfilCalibracion(conductor_id=data.conductor_id)
+            db.add(perfil)
+        
+        if data.ear_baseline is not None: perfil.ear_baseline = data.ear_baseline
+        if data.mar_baseline is not None: perfil.mar_baseline = data.mar_baseline
+        if data.pitch_baseline is not None: perfil.pitch_baseline = data.pitch_baseline
+        if data.yaw_baseline is not None: perfil.yaw_baseline = data.yaw_baseline
+        
+        perfil.initialized = True
+        db.commit()
+        return {"success": True, "message": "Perfil actualizado correctamente"}
+    finally:
+        db.close()
+
+import requests
+import threading
+import time
+
+def sync_firebase_gps():
+    """ Tarea en segundo plano para sincronizar GPS desde Firebase """
+    global fleet_status
+    while True:
+        try:
+            res = requests.get("https://webveloz-gps-default-rtdb.firebaseio.com/vehiculos.json", timeout=5)
+            if res.status_code == 200 and res.json():
+                vehiculos_fb = res.json()
+                
+                db = SessionLocal()
+                try:
+                    # Traemos todos los conductores para emparejar su vehiculo
+                    conductores = db.query(Conductor).all()
+                    
+                    for c in conductores:
+                        if c.vehiculo and c.vehiculo in vehiculos_fb:
+                            fb_data = vehiculos_fb[c.vehiculo]
+                            lat = fb_data.get("lat")
+                            lng = fb_data.get("lng")
+                            velocidad = fb_data.get("velocidad", 0)
+                            
+                            if c.id in fleet_status:
+                                fleet_status[c.id]["lat"] = lat
+                                fleet_status[c.id]["lng"] = lng
+                                if not fleet_status[c.id].get("log_data"):
+                                    fleet_status[c.id]["log_data"] = {}
+                                fleet_status[c.id]["log_data"]["velocidad"] = velocidad
+                            else:
+                                fleet_status[c.id] = {
+                                    "log_data": {"velocidad": velocidad, "ear": 0, "mar": 0, "pitch": 0, "risk_score": 0},
+                                    "lat": lat,
+                                    "lng": lng,
+                                    "snapshot_b64": None,
+                                    "last_seen": datetime.utcnow().isoformat()
+                                }
+                finally:
+                    db.close()
+        except Exception as e:
+            logging.error(f"Error sincronizando con Firebase: {e}")
+            
+        time.sleep(3)  # Consultar cada 3 segundos
+
+@app.on_event("startup")
+def startup_event():
+    threading.Thread(target=sync_firebase_gps, daemon=True).start()
+    logging.info("Sincronizador de Firebase GPS iniciado en segundo plano.")
 
 if __name__ == "__main__":
     uvicorn.run("api_main:app", host="0.0.0.0", port=8000, reload=False)

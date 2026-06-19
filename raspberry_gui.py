@@ -6,14 +6,18 @@ import time
 import threading
 import logging
 import tkinter as tk
+import os
+from dotenv import load_dotenv
 from tkinter import messagebox, font, ttk
 from PIL import Image, ImageTk
 from app.core.copia_system import CopIASystem
 
+load_dotenv()
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] CopIA Edge GUI: %(message)s")
 
-SERVER_URL = "http://localhost:8000"
+SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8000")
 
 class CopIAEdgeApp:
     def __init__(self, root):
@@ -204,7 +208,7 @@ class CopIAEdgeApp:
         
     def start_copia(self):
         logging.info("Inicializando Motor de IA CopIA...")
-        self.system = CopIASystem("config/copia_config.yaml")
+        self.system = CopIASystem("config/copia_config.yaml", edge_mode=True)
         camera_index = self.system.config.get("camera_index", 1)
         
         self.cap = cv2.VideoCapture(camera_index)

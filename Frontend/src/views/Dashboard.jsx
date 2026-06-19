@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Truck, AlertTriangle, Shield, History, MapPin, Activity, LayoutDashboard, UserPlus, BarChart2, Map } from 'lucide-react';
+import { Users, Truck, AlertTriangle, Shield, History, MapPin, Activity, LayoutDashboard, UserPlus, BarChart2, Map as MapIcon } from 'lucide-react';
 import DriverManagement from './DriverManagement';
 import Analytics from './Analytics';
 import RouteManagement from './RouteManagement';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix leafet default icon issue
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 export default function Dashboard() {
   const [drivers, setDrivers] = useState([]);
@@ -116,7 +127,7 @@ export default function Dashboard() {
                 onClick={() => setCurrentView('routes')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${currentView === 'routes' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
-                <Map className="w-5 h-5" /> Gestión de Rutas
+                <MapIcon className="w-5 h-5" /> Gestión de Rutas
             </button>
             <button 
                 onClick={() => setCurrentView('management')}
@@ -233,6 +244,34 @@ export default function Dashboard() {
                     <MetricCard title="Apertura Boca" value={status?.log_data?.mar?.toFixed(3) || '0.000'} subtitle="MAR" highlight={status?.log_data?.mar > 0.60} />
                     <MetricCard title="Cierre Proporcional" value={`${((status?.log_data?.perclos || 0)*100).toFixed(1)}%`} subtitle="PERCLOS" highlight={status?.log_data?.perclos > 0.15} />
                     <MetricCard title="Inclinación" value={status?.log_data?.pitch?.toFixed(1) || '0.0'} subtitle="PITCH" />
+                  </div>
+
+                  {/* GPS Map */}
+                  <div className="glass-panel p-4 rounded-xl relative overflow-hidden h-64 z-0 border border-slate-700/50 shadow-lg">
+                     <h3 className="text-slate-300 font-semibold mb-3 flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-sky-400" /> Seguimiento Satelital
+                     </h3>
+                     {status?.log_data?.lat && status?.log_data?.lng ? (
+                         <div className="w-full h-48 rounded-lg overflow-hidden border border-slate-700/50">
+                             <MapContainer center={[status.log_data.lat, status.log_data.lng]} zoom={16} style={{ height: '100%', width: '100%', zIndex: 1 }}>
+                                 {/* Dark CartoDB Map style to fit the Dashboard */}
+                                 <TileLayer 
+                                     url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
+                                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                                 />
+                                 <Marker position={[status.log_data.lat, status.log_data.lng]}>
+                                    <Popup className="text-slate-800 font-semibold">
+                                        {drivers.find(d => d.id === selectedDriver)?.vehiculo}
+                                    </Popup>
+                                 </Marker>
+                             </MapContainer>
+                         </div>
+                     ) : (
+                         <div className="w-full h-48 bg-slate-800/30 rounded-lg flex flex-col items-center justify-center border border-slate-700/50 border-dashed">
+                             <MapPin className="w-8 h-8 text-slate-600 mb-2" />
+                             <p className="text-slate-500 text-sm">Esperando señal GPS...</p>
+                         </div>
+                     )}
                   </div>
                 </div>
 

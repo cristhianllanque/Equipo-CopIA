@@ -1,14 +1,19 @@
 import os
 import time
 import hashlib
+import json
 from app.core.database import SessionLocal
 from app.models.db_models import Conductor, PerfilCalibracion, SesionConduccion
 from datetime import datetime
 
 class DriverProfileManager:
-    def __init__(self, conductor_id=1):
+    def __init__(self, conductor_id=1, edge_mode=False):
         self.conductor_id = conductor_id
-        self._ensure_conductor_exists()
+        self.edge_mode = edge_mode
+        self.local_profile_path = f"data/local_profile_{self.conductor_id}.json"
+        
+        if not self.edge_mode:
+            self._ensure_conductor_exists()
 
     def _ensure_conductor_exists(self):
         db = SessionLocal()
@@ -30,6 +35,12 @@ class DriverProfileManager:
             db.close()
 
     def load_profile(self):
+        if self.edge_mode:
+            if os.path.exists(self.local_profile_path):
+                with open(self.local_profile_path, 'r') as f:
+                    return json.load(f)
+            return {"initialized": False}
+            
         db = SessionLocal()
         try:
             perfil = db.query(PerfilCalibracion).filter(PerfilCalibracion.conductor_id == self.conductor_id).first()
@@ -49,6 +60,12 @@ class DriverProfileManager:
             db.close()
 
     def save_profile(self, profile):
+        if self.edge_mode:
+            os.makedirs(os.path.dirname(self.local_profile_path), exist_ok=True)
+            with open(self.local_profile_path, 'w') as f:
+                json.dump(profile, f)
+            return
+            
         db = SessionLocal()
         try:
             perfil = db.query(PerfilCalibracion).filter(PerfilCalibracion.conductor_id == self.conductor_id).first()

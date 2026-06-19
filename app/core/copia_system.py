@@ -24,8 +24,9 @@ from app.models.db_models import SesionConduccion, EventoFatiga
 logger = logging.getLogger("CopIA")
 
 class CopIASystem:
-    def __init__(self, config_path="config/copia_config.yaml"):
+    def __init__(self, config_path="config/copia_config.yaml", edge_mode=False):
         self.config = self._load_config(config_path)
+        self.edge_mode = edge_mode
         
         try:
             if not pygame.mixer.get_init():
@@ -34,7 +35,7 @@ class CopIASystem:
             logger.warning("No se pudo inicializar pygame mixer.")
 
         self.eye_classifier = EyeStateClassifier() if self.config.get("use_eye_classifier", True) else None
-        self.profile_manager = DriverProfileManager()
+        self.profile_manager = DriverProfileManager(edge_mode=self.edge_mode)
         self.profile = self.profile_manager.load_profile()
         self.calibrator = BaselineCalibrator(duration_seconds=12, min_samples=30)
         
@@ -56,7 +57,10 @@ class CopIASystem:
 
         # Logging de eventos a CSV y BD
         self._init_event_log()
-        self._init_db_session()
+        if not self.edge_mode:
+            self._init_db_session()
+        else:
+            self.current_db_session_id = None
 
     def _load_config(self, path):
         if os.path.exists(path):
@@ -94,8 +98,8 @@ class CopIASystem:
                     self._log_headers_written = True
                 writer.writerow(data)
                 
-            # Log to DB only if it's an important event
-            if data.get("alert_level", 0) > 0 or data.get("event_type") != "normal":
+            # Log to DB only if it's an important event and not in edge mode
+            if not self.edge_mode and (data.get("alert_level", 0) > 0 or data.get("event_type") != "normal"):
                 db = SessionLocal()
                 try:
                     evento = EventoFatiga(
@@ -208,13 +212,13 @@ class CopIASystem:
         logger.info(f"Sesión finalizada. Log guardado en: {self.log_file_path}")
         
         # Cerrar sesión en BD
-        db = SessionLocal()
-        try:
-            if hasattr(self, 'current_db_session_id'):
-                sesion = db.query(SesionConduccion).filter(SesionConduccion.id == self.current_db_session_id).first()
-                if sesion:
-                    sesion.fin_sesion = datetime.utcnow()
-                    db.commit()
-        finally:
-            db.close()
-
+        if not self.edge_mode:
+            db = SessionLocal()
+            try:
+                if hasattr(self, 'current_db_session_id'):
+                    sesion = db.query(SesionConduccion).filter(SesionConduccion.id == self.current_db_session_id).first()
+                    if sesion:
+                        sesion.fin_sesion = datetime.utcnow()
+                        db.commit()
+            finally:
+                db.close()
