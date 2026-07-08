@@ -7,6 +7,8 @@ import threading
 import logging
 import tkinter as tk
 import os
+from datetime import datetime, timedelta
+import pytz
 from dotenv import load_dotenv
 from tkinter import messagebox, font, ttk
 from PIL import Image, ImageTk
@@ -18,6 +20,9 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] CopIA Edge GUI: %(message)s")
 
 SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8000")
+
+def get_peru_time():
+    return datetime.now(pytz.timezone("America/Lima")).replace(tzinfo=None)
 
 class CopIAEdgeApp:
     def __init__(self, root):
@@ -217,14 +222,31 @@ class CopIAEdgeApp:
         self.lbl_metrics = tk.Label(right_panel, text="Cargando métricas...", font=self.normal_font, bg="#1e293b", fg="white", justify=tk.LEFT)
         self.lbl_metrics.pack(pady=20, anchor="w", padx=30)
         
-        btn_panic = tk.Button(right_panel, text="🚨 BOTÓN ANTI-ROBO", font=self.btn_font, bg="#dc2626", fg="white",
-                              activebackground="#991b1b", activeforeground="white", command=self.send_panic, relief=tk.RAISED)
-        btn_panic.pack(pady=(30, 10), fill=tk.X, padx=20, ipady=15)
+        # Contenedor para botón de pánico
+        panic_frame = tk.Frame(right_panel, bg="#1e293b")
+        panic_frame.pack(pady=(20, 10), fill=tk.X, padx=20)
+        
+        self.canvas_panic = tk.Canvas(panic_frame, width=120, height=120, bg="#1e293b", highlightthickness=0)
+        self.canvas_panic.pack(pady=5)
+        
+        self.circle_id = self.canvas_panic.create_oval(10, 10, 110, 110, fill="#dc2626", outline="#991b1b", width=3)
+        self.text_id = self.canvas_panic.create_text(60, 60, text="🚨\nS.O.S", fill="white", font=("Helvetica", 16, "bold"), justify=tk.CENTER)
+        
+        self.canvas_panic.tag_bind(self.circle_id, "<Button-1>", self.on_panic_click)
+        self.canvas_panic.tag_bind(self.text_id, "<Button-1>", self.on_panic_click)
+        
+        lbl_panic_desc = tk.Label(panic_frame, text="presionar en caso de robos", font=("Helvetica", 11, "italic"), bg="#1e293b", fg="#94a3b8")
+        lbl_panic_desc.pack()
         
         # Iniciar hilos
         self.is_running = True
         self.start_copia()
         
+    def on_panic_click(self, event):
+        self.canvas_panic.itemconfig(self.circle_id, fill="#991b1b")
+        self.root.after(200, lambda: self.canvas_panic.itemconfig(self.circle_id, fill="#dc2626"))
+        self.send_panic()
+
     def send_panic(self):
         try:
             response = requests.post(f"{SERVER_URL}/api/trip/panic", json={
@@ -281,19 +303,42 @@ class CopIAEdgeApp:
                     self.latest_payload = {
                         "conductor_id": self.conductor_id,
                         "log_data": log_data,
-                        "snapshot_b64": b64_str
+                        "snapshot_b64": b64_str,
+                        "event_timestamp": get_peru_time().isoformat()
                     }
                     
     def telemetry_worker(self):
+        telemetry_queue = []
         while self.is_running:
             if self.latest_payload:
                 payload = self.latest_payload
                 self.latest_payload = None
+                
+                # Encolar si hay alerta crítica
+                is_critical = payload["log_data"].get("alert_level", 0) > 0 or payload["log_data"].get("event_type") in ["PÁNICO_EMERGENCIA", "ROBO_ASALTO"]
+                if is_critical:
+                    telemetry_queue.append(payload)
+                else:
+                    telemetry_queue.insert(0, payload)
+                
+                if len(telemetry_queue) > 1000:
+                    telemetry_queue.pop(0)
+                    
+            if telemetry_queue:
+                payload_to_send = telemetry_queue[0]
                 try:
                     with requests.Session() as s:
-                        s.post(f"{SERVER_URL}/api/telemetry", json=payload, timeout=1.0)
+                        resp = s.post(f"{SERVER_URL}/api/telemetry", json=payload_to_send, timeout=1.5)
+                        if resp.status_code == 200:
+                            telemetry_queue.pop(0)
+                        else:
+                            time.sleep(1)
                 except Exception:
-                    pass
+                    is_critical = payload_to_send["log_data"].get("alert_level", 0) > 0 or payload_to_send["log_data"].get("event_type") in ["PÁNICO_EMERGENCIA", "ROBO_ASALTO"]
+                    if not is_critical:
+                        telemetry_queue.pop(0)
+                    else:
+                        time.sleep(1)
             else:
                 time.sleep(0.01)
 

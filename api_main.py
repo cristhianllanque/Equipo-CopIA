@@ -6,7 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
+
+def get_peru_time():
+    return datetime.now(pytz.timezone("America/Lima")).replace(tzinfo=None)
 
 # Configurar logging
 logging.basicConfig(
@@ -90,6 +94,7 @@ class TelemetryPayload(BaseModel):
     lat: float = None
     lng: float = None
     snapshot_b64: str = None  # Imagen JPG en base64
+    event_timestamp: str = None
 
 class EndTripPayload(BaseModel):
     conductor_id: int
@@ -173,16 +178,26 @@ def auth_conductor(data: AuthLogin):
         db.close()
 
 @app.post("/api/trip/start")
-def start_trip(data: StartTripPayload):
+def start_trip(payload: StartTripPayload):
     db = SessionLocal()
     try:
         sesion = SesionConduccion(
-            conductor_id=data.conductor_id,
-            ruta_id=data.ruta_id,
-            inicio_sesion=datetime.utcnow()
+            conductor_id=payload.conductor_id,
+            ruta_id=payload.ruta_id,
+            inicio_sesion=get_peru_time()
         )
         db.add(sesion)
         db.commit()
+        db.refresh(sesion)
+        
+        # Registrar en estado global
+        global fleet_status
+        fleet_status[payload.conductor_id] = {
+            "inicio_sesion": get_peru_time().isoformat(),
+            "last_seen": get_peru_time().isoformat(),
+            "log_data": {}
+        }
+        
         return {"success": True, "sesion_id": sesion.id}
     finally:
         db.close()
@@ -200,7 +215,7 @@ def end_trip(data: EndTripPayload):
         if not sesion:
             return JSONResponse(status_code=400, content={"error": "No hay sesión activa para este conductor"})
         
-        sesion.fin_sesion = datetime.utcnow()
+        sesion.fin_sesion = get_peru_time()
         
         # Calcular eventos
         eventos = db.query(EventoFatiga).filter(EventoFatiga.sesion_id == sesion.id).all()
@@ -231,10 +246,23 @@ def panic_alert(data: PanicPayload):
                 sesion_id=sesion.id,
                 tipo_evento="ROBO_ASALTO",
                 nivel_riesgo=100,
-                timestamp=datetime.utcnow()
+                timestamp=get_peru_time()
             )
             db.add(evento)
             db.commit()
+            
+            # Forzar actualización en vivo para el Dashboard
+            global fleet_status
+            cid = data.conductor_id
+            if cid in fleet_status:
+                if "log_data" not in fleet_status[cid]:
+                    fleet_status[cid]["log_data"] = {}
+                fleet_status[cid]["log_data"]["event_type"] = "ROBO_ASALTO"
+                fleet_status[cid]["log_data"]["risk_score"] = 100
+                fleet_status[cid]["log_data"]["alert_level"] = 2
+                fleet_status[cid]["log_data"]["explanation"] = "Botón de pánico anti-robo activado."
+                fleet_status[cid]["last_seen"] = get_peru_time().isoformat()
+            
             return {"success": True, "message": "Alerta de pánico registrada."}
         return JSONResponse(status_code=400, content={"error": "No hay sesión activa para el botón de pánico"})
     finally:
@@ -281,7 +309,7 @@ def receive_telemetry(payload: TelemetryPayload):
         "lat": payload.lat,
         "lng": payload.lng,
         "snapshot_b64": payload.snapshot_b64,
-        "last_seen": datetime.utcnow().isoformat()
+        "last_seen": get_peru_time().isoformat()
     }
 
     # Si hay un evento crítico, lo guardamos en la base de datos central
@@ -295,12 +323,20 @@ def receive_telemetry(payload: TelemetryPayload):
             ).order_by(SesionConduccion.id.desc()).first()
             
             if sesion:
+                event_time = get_peru_time()
+                if hasattr(payload, 'event_timestamp') and payload.event_timestamp:
+                    try:
+                        event_time = datetime.fromisoformat(payload.event_timestamp)
+                    except:
+                        pass
+                
                 evento = EventoFatiga(
                     sesion_id=sesion.id,
                     tipo_evento=payload.log_data.get("event_type", "alerta"),
                     nivel_riesgo=payload.log_data.get("risk_score", 0),
                     ear_registrado=payload.log_data.get("ear", 0),
-                    mar_registrado=payload.log_data.get("mar", 0)
+                    mar_registrado=payload.log_data.get("mar", 0),
+                    timestamp=event_time
                 )
                 db.add(evento)
                 db.commit()
@@ -321,6 +357,14 @@ def get_status(conductor_id: int = Query(None)):
     status = fleet_status.get(conductor_id, None)
     if not status:
         return JSONResponse(content={"offline": True})
+        
+    try:
+        last_seen_time = datetime.fromisoformat(status.get("last_seen", get_peru_time().isoformat()))
+        # Si han pasado más de 15 segundos, marcar offline
+        if (get_peru_time() - last_seen_time).total_seconds() > 15:
+            return JSONResponse(content={"offline": True, "last_seen": status["last_seen"], "stale": True})
+    except:
+        pass
     
     # Inyectar lat/lng dentro de log_data para compatibilidad fácil en el frontend
     status_no_img = {k: v for k, v in status.items() if k != "snapshot_b64"}
@@ -398,7 +442,7 @@ def get_analytics():
         } for c in conductor_riesgo]
 
         # Total de eventos hoy
-        hoy = datetime.utcnow().date()
+        hoy = get_peru_time().date()
         total_hoy = db.query(EventoFatiga).filter(func.date(EventoFatiga.timestamp) == hoy).count()
 
         return {
@@ -416,7 +460,13 @@ def get_perfil(conductor_id: int = Query(...)):
     try:
         perfil = db.query(PerfilCalibracion).filter(PerfilCalibracion.conductor_id == conductor_id).first()
         if not perfil:
-            return JSONResponse(status_code=404, content={"error": "Perfil no encontrado"})
+            return {
+                "ear_baseline": 0.0,
+                "mar_baseline": 0.0,
+                "pitch_baseline": 0.0,
+                "yaw_baseline": 0.0,
+                "initialized": False
+            }
         return {
             "ear_baseline": perfil.ear_baseline,
             "mar_baseline": perfil.mar_baseline,
@@ -484,7 +534,7 @@ def sync_firebase_gps():
                                     "lat": lat,
                                     "lng": lng,
                                     "snapshot_b64": None,
-                                    "last_seen": datetime.utcnow().isoformat()
+                                    "last_seen": get_peru_time().isoformat()
                                 }
                 finally:
                     db.close()

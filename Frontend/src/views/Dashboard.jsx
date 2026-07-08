@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Users, Truck, AlertTriangle, Shield, History, MapPin, Activity, LayoutDashboard, UserPlus, BarChart2, Map as MapIcon } from 'lucide-react';
 import DriverManagement from './DriverManagement';
 import Analytics from './Analytics';
@@ -6,6 +6,8 @@ import RouteManagement from './RouteManagement';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+
+const globalAudio = new Audio('/antirobo.mp3');
 
 // Fix leafet default icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -22,7 +24,8 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(null);
   const [events, setEvents] = useState([]);
   const [currentView, setCurrentView] = useState('monitor'); // monitor, management, analytics, routes
-  const [lastRoboEventId, setLastRoboEventId] = useState(null);
+  const lastRoboEventIdRef = useRef(null);
+  const isFirstLoadRef = useRef(true);
 
   useEffect(() => {
     // Polling solo de lista de conductores
@@ -47,13 +50,16 @@ export default function Dashboard() {
 
         if (statusRes) {
             const statusData = await statusRes.json();
-            if (statusData.offline) {
+            if (statusData.offline && !statusData.stale) {
                 setStatus(null);
+                setDrivers(prev => prev.map(d => 
+                    d.id === selectedDriver ? {...d, status: 'offline'} : d
+                ));
             } else {
                 setStatus(statusData);
                 // Actualizar risk en la lista localmente
                 setDrivers(prev => prev.map(d => 
-                    d.id === selectedDriver ? {...d, risk: statusData.log_data.risk_score, status: 'active'} : d
+                    d.id === selectedDriver ? {...d, risk: statusData.log_data?.risk_score, status: statusData.stale ? 'offline' : 'active'} : d
                 ));
             }
         }
@@ -66,20 +72,27 @@ export default function Dashboard() {
     
     const fetchGlobalEvents = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/eventos');
+        const res = await fetch('http://localhost:8000/api/eventos?_t=' + Date.now());
         if (res.ok) {
           const globalEvents = await res.json();
           const roboEvents = globalEvents.filter(e => e.tipo_evento === 'ROBO_ASALTO');
+          
           if (roboEvents.length > 0) {
             const latestRobo = roboEvents[0];
-            setLastRoboEventId(prev => {
-              if (prev !== null && prev !== latestRobo.id) {
-                 const audio = new Audio('/antirobo.mp3');
-                 audio.play().catch(e => console.log('Error reproduciendo audio', e));
-              }
-              return latestRobo.id;
-            });
+            
+            if (lastRoboEventIdRef.current !== latestRobo.id) {
+                lastRoboEventIdRef.current = latestRobo.id;
+                
+                if (!isFirstLoadRef.current) {
+                    globalAudio.currentTime = 0;
+                    globalAudio.play().catch(e => {
+                        console.error('Navegador bloqueó el audio', e);
+                        document.addEventListener('click', () => globalAudio.play(), { once: true });
+                    });
+                }
+            }
           }
+          isFirstLoadRef.current = false;
         }
       } catch (err) {}
     };
@@ -100,8 +113,8 @@ export default function Dashboard() {
   }, [selectedDriver, currentView]);
 
   return (
-    <div className="h-screen bg-[#0f172a] text-slate-200 font-sans flex flex-col overflow-hidden">
-      {/* Header Premium */}
+    <div className="flex flex-col h-screen bg-[#0f172a] text-slate-200 font-sans overflow-hidden">
+      {/* Top Navigation */}
       <header className="h-16 border-b border-slate-700/50 bg-slate-900 flex items-center justify-between px-6 z-10 shadow-md">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(14,165,233,0.5)]">
@@ -179,7 +192,15 @@ export default function Dashboard() {
                         >
                             <div className="flex justify-between items-start mb-2">
                             <h3 className="font-semibold text-slate-100">{driver.nombre}</h3>
-                            <span className={`w-2 h-2 rounded-full mt-1.5 ${driver.status === 'active' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-500'}`}></span>
+                            {driver.status === 'active' ? (
+                                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> TRANSMITIENDO
+                                </span>
+                            ) : (
+                                <span className="text-[10px] bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded-full font-bold border border-slate-600 flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" /> SIN SEÑAL
+                                </span>
+                            )}
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3">
                             <MapPin className="w-3.5 h-3.5" /> {driver.ruta_asignada}
@@ -231,6 +252,14 @@ export default function Dashboard() {
                   
                   {/* Stream de Video (Streaming Nativo MJPEG) */}
                   <div className="glass-panel rounded-2xl overflow-hidden shadow-2xl relative border border-slate-700/60 aspect-video bg-black flex items-center justify-center">
+                    {/* Overlay de Desconexión (Túnel/Falta de Red) */}
+                    {status && status.stale && (
+                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-20 flex flex-col items-center justify-center border-2 border-amber-500/50 rounded-2xl">
+                            <AlertTriangle className="w-12 h-12 text-amber-500 mb-3 animate-pulse" />
+                            <h3 className="text-xl font-bold text-white tracking-widest uppercase">Fuera de Cobertura</h3>
+                            <p className="text-slate-300 text-sm mt-1">Esperando reconexión satelital de la unidad...</p>
+                        </div>
+                    )}
                     <div className="absolute top-4 left-4 z-10 flex gap-2">
                       <span className="bg-rose-500 text-white text-xs font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1">
                         <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div> SATELITAL

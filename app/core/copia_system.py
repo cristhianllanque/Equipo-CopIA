@@ -6,6 +6,10 @@ import csv
 import numpy as np
 import pygame
 from datetime import datetime
+import pytz
+
+def get_peru_time():
+    return datetime.now(pytz.timezone("America/Lima")).replace(tzinfo=None)
 
 from app.core.frame_processor import FrameProcessor
 from app.core.event_orchestrator import EventOrchestrator
@@ -79,7 +83,7 @@ class CopIASystem:
         db = SessionLocal()
         try:
             # conductor_id = 1 as default
-            nueva_sesion = SesionConduccion(conductor_id=1, inicio_sesion=datetime.utcnow())
+            nueva_sesion = SesionConduccion(conductor_id=1, inicio_sesion=get_peru_time())
             db.add(nueva_sesion)
             db.commit()
             db.refresh(nueva_sesion)
@@ -108,7 +112,7 @@ class CopIASystem:
                         nivel_riesgo=float(data.get("risk_score", 0)),
                         ear_registrado=float(data.get("ear", 0)),
                         mar_registrado=float(data.get("mar", 0)),
-                        timestamp=datetime.utcnow()
+                        timestamp=get_peru_time()
                     )
                     db.add(evento)
                     db.commit()
@@ -218,7 +222,7 @@ class CopIASystem:
                 if hasattr(self, 'current_db_session_id'):
                     sesion = db.query(SesionConduccion).filter(SesionConduccion.id == self.current_db_session_id).first()
                     if sesion:
-                        sesion.fin_sesion = datetime.utcnow()
+                        sesion.fin_sesion = get_peru_time()
                         db.commit()
             finally:
                 db.close()
