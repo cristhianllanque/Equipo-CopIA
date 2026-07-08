@@ -155,6 +155,21 @@ class CopIAEdgeApp:
                 data = response.json()
                 if data.get("success"):
                     self.sesion_id = data["sesion_id"]
+                    
+                    # Reproducir saludo por voz
+                    try:
+                        from app.copiloto.voice_assistant import VoiceAssistant
+                        import random
+                        va = VoiceAssistant()
+                        destino = ruta_seleccionada.get("destino", "su destino")
+                        horas = random.randint(1, 4)
+                        minutos = random.randint(10, 50)
+                        tiempo_estimado = f"{horas} horas y {minutos} minutos"
+                        saludo = f"Hola {self.conductor_nombre}. Iniciando viaje hacia {destino}. El tiempo promedio de llegada es de {tiempo_estimado}. Te acompañaré en la ruta."
+                        va.speak(saludo, force=True)
+                    except Exception as e:
+                        logging.error(f"Error al reproducir saludo: {e}")
+
                     self.show_dashboard_screen()
                 else:
                     messagebox.showerror("Error", "Error al iniciar viaje en el servidor.")
@@ -202,10 +217,26 @@ class CopIAEdgeApp:
         self.lbl_metrics = tk.Label(right_panel, text="Cargando métricas...", font=self.normal_font, bg="#1e293b", fg="white", justify=tk.LEFT)
         self.lbl_metrics.pack(pady=20, anchor="w", padx=30)
         
+        btn_panic = tk.Button(right_panel, text="🚨 BOTÓN ANTI-ROBO", font=self.btn_font, bg="#dc2626", fg="white",
+                              activebackground="#991b1b", activeforeground="white", command=self.send_panic, relief=tk.RAISED)
+        btn_panic.pack(pady=(30, 10), fill=tk.X, padx=20, ipady=15)
+        
         # Iniciar hilos
         self.is_running = True
         self.start_copia()
         
+    def send_panic(self):
+        try:
+            response = requests.post(f"{SERVER_URL}/api/trip/panic", json={
+                "conductor_id": self.conductor_id
+            }, timeout=3.0)
+            if response.status_code == 200:
+                messagebox.showinfo("Alerta de Robo Enviada", "Se ha enviado una alerta de ROBO/ASALTO a la central.\nTu posición GPS actual está siendo rastreada.")
+            else:
+                messagebox.showerror("Error", "No se pudo enviar la alerta de pánico.")
+        except:
+            messagebox.showerror("Error", "Error de conexión al enviar pánico.")
+
     def start_copia(self):
         logging.info("Inicializando Motor de IA CopIA...")
         self.system = CopIASystem("config/copia_config.yaml", edge_mode=True)

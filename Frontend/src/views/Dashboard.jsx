@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(null);
   const [events, setEvents] = useState([]);
   const [currentView, setCurrentView] = useState('monitor'); // monitor, management, analytics, routes
+  const [lastRoboEventId, setLastRoboEventId] = useState(null);
 
   useEffect(() => {
     // Polling solo de lista de conductores
@@ -40,7 +41,7 @@ export default function Dashboard() {
       try {
         const [statusRes, profileRes, eventsRes] = await Promise.all([
           fetch(`http://localhost:8000/api/status?conductor_id=${selectedDriver}`).catch(() => null),
-          fetch(`http://localhost:8000/api/profile?conductor_id=${selectedDriver}`).catch(() => null),
+          fetch(`http://localhost:8000/api/config/perfil?conductor_id=${selectedDriver}`).catch(() => null),
           fetch(`http://localhost:8000/api/eventos?conductor_id=${selectedDriver}`).catch(() => null)
         ]);
 
@@ -63,14 +64,38 @@ export default function Dashboard() {
       }
     };
     
+    const fetchGlobalEvents = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/api/eventos');
+        if (res.ok) {
+          const globalEvents = await res.json();
+          const roboEvents = globalEvents.filter(e => e.tipo_evento === 'ROBO_ASALTO');
+          if (roboEvents.length > 0) {
+            const latestRobo = roboEvents[0];
+            setLastRoboEventId(prev => {
+              if (prev !== null && prev !== latestRobo.id) {
+                 const audio = new Audio('/antirobo.mp3');
+                 audio.play().catch(e => console.log('Error reproduciendo audio', e));
+              }
+              return latestRobo.id;
+            });
+          }
+        }
+      } catch (err) {}
+    };
+
     fetchData();
+    fetchGlobalEvents();
+    
     // Actualizar el Dashboard web 10 veces por segundo (100ms) para ver métricas fluidas
     const interval = setInterval(fetchData, 100);
     const driversInterval = setInterval(fetchDrivers, 10000);
+    const globalEventsInterval = setInterval(fetchGlobalEvents, 3000);
 
     return () => {
       clearInterval(interval);
       clearInterval(driversInterval);
+      clearInterval(globalEventsInterval);
     };
   }, [selectedDriver, currentView]);
 

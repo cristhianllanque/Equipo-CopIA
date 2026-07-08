@@ -1,4 +1,4 @@
-# Especificación de Requisitos de Software (SRS) - IEEE 29148
+# Especificación de Requerimientos de Software (SRS) - IEEE 29148
 
 ## 1. Introducción
 **Propósito:** Este documento define los requisitos para el sistema CopIA, una herramienta de asistencia al conductor basada en inteligencia artificial adaptativa y visión computacional para la prevención de accidentes por fatiga y somnolencia.

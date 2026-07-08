@@ -18,7 +18,16 @@ logging.basicConfig(
 # Formato: { conductor_id: { "log_data": {...}, "snapshot_b64": "...", "last_seen": timestamp } }
 fleet_status = {}
 
-app = FastAPI(title="CopIA Cloud Server", description="Servidor central para recepción de telemetría IoT", version="2.0.0")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    import threading
+    threading.Thread(target=sync_firebase_gps, daemon=True).start()
+    logging.info("Sincronizador de Firebase GPS iniciado en segundo plano.")
+    yield
+
+app = FastAPI(title="CopIA Cloud Server", description="Servidor central para recepción de telemetría IoT", version="2.0.0", lifespan=lifespan)
 
 # Habilitar CORS
 app.add_middleware(
@@ -84,6 +93,11 @@ class TelemetryPayload(BaseModel):
 
 class EndTripPayload(BaseModel):
     conductor_id: int
+
+class PanicPayload(BaseModel):
+    conductor_id: int
+    lat: float = None
+    lng: float = None
 
 class PerfilUpdate(BaseModel):
     conductor_id: int
@@ -200,6 +214,29 @@ def end_trip(data: EndTripPayload):
             "total_eventos": total_eventos, 
             "riesgo_promedio": round(avg_risk, 2)
         }
+    finally:
+        db.close()
+
+@app.post("/api/trip/panic")
+def panic_alert(data: PanicPayload):
+    db = SessionLocal()
+    try:
+        sesion = db.query(SesionConduccion).filter(
+            SesionConduccion.conductor_id == data.conductor_id,
+            SesionConduccion.fin_sesion == None
+        ).order_by(SesionConduccion.id.desc()).first()
+        
+        if sesion:
+            evento = EventoFatiga(
+                sesion_id=sesion.id,
+                tipo_evento="ROBO_ASALTO",
+                nivel_riesgo=100,
+                timestamp=datetime.utcnow()
+            )
+            db.add(evento)
+            db.commit()
+            return {"success": True, "message": "Alerta de pánico registrada."}
+        return JSONResponse(status_code=400, content={"error": "No hay sesión activa para el botón de pánico"})
     finally:
         db.close()
 
@@ -419,7 +456,7 @@ def sync_firebase_gps():
     global fleet_status
     while True:
         try:
-            res = requests.get("https://webveloz-gps-default-rtdb.firebaseio.com/vehiculos.json", timeout=5)
+            res = requests.get("https://webveloz-gps-default-rtdb.firebaseio.com/vehiculos.json", timeout=15)
             if res.status_code == 200 and res.json():
                 vehiculos_fb = res.json()
                 
@@ -451,15 +488,16 @@ def sync_firebase_gps():
                                 }
                 finally:
                     db.close()
+        except requests.exceptions.Timeout:
+            logging.warning("Sincronizador de Firebase GPS: Tiempo de espera agotado (timeout). Reintentando en breve...")
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error de red sincronizando con Firebase: {e}")
         except Exception as e:
-            logging.error(f"Error sincronizando con Firebase: {e}")
+            logging.error(f"Error inesperado sincronizando con Firebase: {e}")
             
         time.sleep(3)  # Consultar cada 3 segundos
 
-@app.on_event("startup")
-def startup_event():
-    threading.Thread(target=sync_firebase_gps, daemon=True).start()
-    logging.info("Sincronizador de Firebase GPS iniciado en segundo plano.")
+
 
 if __name__ == "__main__":
     uvicorn.run("api_main:app", host="0.0.0.0", port=8000, reload=False)

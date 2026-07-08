@@ -1,0 +1,10 @@
+==========================================================
+                  RESULTADOS REALES CopIA                 
+==========================================================
+Total Frames Analizados: 3534
+Accuracy (Exactitud):  0.6138 (61.4%)
+Precision (Precisión): 0.9628 (96.3%)
+Recall (Sensibilidad): 0.2348 (23.5%)
+F1-Score:              0.3776 (37.8%)
+==========================================================
+Puedes copiar estos datos a tu artículo como 'Prueba de validación empírica en laboratorio'.
