@@ -70,3 +70,12 @@ class EventoFatiga(Base):
     mar_registrado = Column(Float)
 
     sesion = relationship("SesionConduccion", back_populates="eventos")
+
+class Operador(Base):
+    __tablename__ = "operadores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    rol = Column(String(20), default="admin")
+    fecha_registro = Column(DateTime, default=datetime.utcnow)

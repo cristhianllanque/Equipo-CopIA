@@ -23,9 +23,30 @@ logging.basicConfig(
 fleet_status = {}
 
 from contextlib import asynccontextmanager
+from app.core.database import engine, Base
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Crear tablas si no existen
+    Base.metadata.create_all(bind=engine)
+    
+    # Crear admin por defecto
+    from app.core.database import SessionLocal
+    from app.models.db_models import Operador
+    db = SessionLocal()
+    try:
+        admin_user = db.query(Operador).filter(Operador.username == "copai@gmail.com").first()
+        if not admin_user:
+            hashed_pw = hashlib.sha256("copai123".encode()).hexdigest()
+            new_admin = Operador(username="copai@gmail.com", password_hash=hashed_pw, rol="admin")
+            db.add(new_admin)
+            db.commit()
+            logging.info("Admin por defecto 'copai@gmail.com' creado con éxito.")
+    except Exception as e:
+        logging.error(f"Error al crear admin: {e}")
+    finally:
+        db.close()
+
     import threading
     threading.Thread(target=sync_firebase_gps, daemon=True).start()
     logging.info("Sincronizador de Firebase GPS iniciado en segundo plano.")
@@ -64,7 +85,7 @@ def read_root():
     """
 
 from app.core.database import SessionLocal
-from app.models.db_models import Conductor, SesionConduccion, EventoFatiga
+from app.models.db_models import Conductor, SesionConduccion, EventoFatiga, Operador
 
 # --- MODELOS PYDANTIC ---
 class ConductorCreate(BaseModel):
@@ -98,6 +119,26 @@ class TelemetryPayload(BaseModel):
 
 class EndTripPayload(BaseModel):
     conductor_id: int
+
+# --- ENDPOINTS ---
+from fastapi import HTTPException
+
+@app.post("/api/auth/operador/login")
+def login_operador(login_data: AuthLogin):
+    db = SessionLocal()
+    try:
+        hashed_pw = hashlib.sha256(login_data.password.encode()).hexdigest()
+        operador = db.query(Operador).filter(
+            Operador.username == login_data.username,
+            Operador.password_hash == hashed_pw
+        ).first()
+        
+        if operador:
+            return {"status": "success", "message": "Autenticación exitosa", "operador_id": operador.id, "rol": operador.rol}
+        else:
+            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    finally:
+        db.close()
 
 class PanicPayload(BaseModel):
     conductor_id: int

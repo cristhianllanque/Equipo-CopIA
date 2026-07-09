@@ -17,7 +17,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-export default function Dashboard() {
+export default function Dashboard({ onLogout }) {
   const [drivers, setDrivers] = useState([]);
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [status, setStatus] = useState(null);
@@ -113,16 +113,21 @@ export default function Dashboard() {
   }, [selectedDriver, currentView]);
 
   return (
-    <div className="flex flex-col h-screen bg-[#0f172a] text-slate-200 font-sans overflow-hidden">
+    <div className="flex flex-col h-screen text-slate-200 font-sans overflow-hidden bg-cover bg-center bg-no-repeat relative" style={{ backgroundImage: "url('/dashboard-bg.png')" }}>
+      {/* Capa de cristal oscuro general para legibilidad */}
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[3px] z-0"></div>
+      
+      {/* Contenido Superior (zIndex para estar por encima del fondo) */}
+      <div className="z-10 flex flex-col h-full w-full">
       {/* Top Navigation */}
-      <header className="h-16 border-b border-slate-700/50 bg-slate-900 flex items-center justify-between px-6 z-10 shadow-md">
+      <header className="h-16 glass-panel border-b border-sky-500/30 flex items-center justify-between px-6 shadow-md">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(14,165,233,0.5)]">
+          <div className="w-8 h-8 bg-gradient-to-br from-sky-400 to-indigo-600 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(14,165,233,0.5)] border border-sky-400/30">
             <Truck className="w-5 h-5 text-white" />
           </div>
           <div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
-              Transportes Veloz
+              CopIA
             </h1>
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Centro de Control Avanzado</p>
           </div>
@@ -136,7 +141,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 border-l border-slate-700 pl-6">
             <div className="text-right hidden md:block">
               <p className="text-sm font-semibold text-slate-200">Operador OP-001</p>
-              <p className="text-xs text-sky-400 cursor-pointer hover:underline">Cerrar Sesión</p>
+              <button onClick={onLogout} className="text-xs text-sky-400 cursor-pointer hover:text-sky-300 hover:underline bg-transparent border-none p-0">Cerrar Sesión</button>
             </div>
             <div className="w-10 h-10 bg-slate-700 rounded-full border border-slate-600 flex items-center justify-center">
               <Users className="w-5 h-5 text-slate-300" />
@@ -145,9 +150,9 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden z-10">
         {/* Sidebar Principal */}
-        <aside className="w-80 border-r border-slate-700/50 bg-slate-800/30 flex flex-col">
+        <aside className="w-80 border-r border-sky-500/20 glass-panel flex flex-col">
           <div className="p-4 border-b border-slate-700/50 space-y-2">
             <button 
                 onClick={() => setCurrentView('monitor')}
@@ -412,6 +417,7 @@ export default function Dashboard() {
             </div>
           )}
         </main>
+      </div>
       </div>
     </div>
   );

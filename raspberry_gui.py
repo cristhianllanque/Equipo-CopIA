@@ -5,13 +5,14 @@ import requests
 import time
 import threading
 import logging
-import tkinter as tk
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 from dotenv import load_dotenv
-from tkinter import messagebox, font, ttk
+import tkinter as tk
+from tkinter import messagebox
 from PIL import Image, ImageTk
+import customtkinter as ctk
 from app.core.copia_system import CopIASystem
 
 load_dotenv()
@@ -24,13 +25,15 @@ SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8000")
 def get_peru_time():
     return datetime.now(pytz.timezone("America/Lima")).replace(tzinfo=None)
 
+# Configuración global de CustomTkinter
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
 class CopIAEdgeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("CopIA Edge Monitor")
-        # Iniciar en pantalla completa o tamaño grande
         self.root.geometry("1024x600")
-        self.root.configure(bg="#0f172a") # Slate 900
         
         # Estado de sesión
         self.conductor_id = None
@@ -47,11 +50,6 @@ class CopIAEdgeApp:
         self.latest_frame = None
         self.latest_log_data = None
         
-        # Fuentes
-        self.title_font = font.Font(family="Helvetica", size=36, weight="bold")
-        self.normal_font = font.Font(family="Helvetica", size=18)
-        self.btn_font = font.Font(family="Helvetica", size=20, weight="bold")
-        
         self.show_login_screen()
         
     def show_login_screen(self):
@@ -59,27 +57,25 @@ class CopIAEdgeApp:
         for widget in self.root.winfo_children():
             widget.destroy()
             
-        # Contenedor central
-        frame = tk.Frame(self.root, bg="#1e293b", padx=50, pady=50) # Slate 800
+        # Contenedor central (Estilo Tarjeta Moderna)
+        frame = ctk.CTkFrame(master=self.root, width=450, height=500, corner_radius=20, fg_color="#1e293b")
         frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         
-        lbl_title = tk.Label(frame, text="Transportes Veloz", font=self.title_font, bg="#1e293b", fg="#38bdf8")
-        lbl_title.pack(pady=(0, 10))
+        lbl_title = ctk.CTkLabel(master=frame, text="Transportes Veloz", font=("Helvetica", 32, "bold"), text_color="#38bdf8")
+        lbl_title.place(relx=0.5, y=60, anchor=tk.CENTER)
         
-        lbl_sub = tk.Label(frame, text="Terminal de Cabina - CopIA", font=self.normal_font, bg="#1e293b", fg="#94a3b8")
-        lbl_sub.pack(pady=(0, 40))
+        lbl_sub = ctk.CTkLabel(master=frame, text="CopIA Edge - Terminal Integrada", font=("Helvetica", 16), text_color="#94a3b8")
+        lbl_sub.place(relx=0.5, y=100, anchor=tk.CENTER)
         
-        tk.Label(frame, text="Usuario:", font=self.normal_font, bg="#1e293b", fg="white").pack(anchor="w")
-        self.entry_user = tk.Entry(frame, font=self.normal_font, bg="#334155", fg="white", insertbackground="white", width=25)
-        self.entry_user.pack(pady=(5, 20), ipady=10)
+        self.entry_user = ctk.CTkEntry(master=frame, width=320, height=50, placeholder_text="ID Conductor", corner_radius=10, font=("Helvetica", 18), fg_color="#334155", border_color="#475569")
+        self.entry_user.place(relx=0.5, y=190, anchor=tk.CENTER)
         
-        tk.Label(frame, text="Contraseña:", font=self.normal_font, bg="#1e293b", fg="white").pack(anchor="w")
-        self.entry_pass = tk.Entry(frame, font=self.normal_font, bg="#334155", fg="white", insertbackground="white", width=25, show="*")
-        self.entry_pass.pack(pady=(5, 30), ipady=10)
+        self.entry_pass = ctk.CTkEntry(master=frame, width=320, height=50, placeholder_text="Contraseña", show="*", corner_radius=10, font=("Helvetica", 18), fg_color="#334155", border_color="#475569")
+        self.entry_pass.place(relx=0.5, y=270, anchor=tk.CENTER)
         
-        btn_login = tk.Button(frame, text="INICIAR VIAJE", font=self.btn_font, bg="#0284c7", fg="white", 
-                              activebackground="#0369a1", activeforeground="white", command=self.do_login, relief=tk.FLAT)
-        btn_login.pack(fill=tk.X, ipady=15)
+        btn_login = ctk.CTkButton(master=frame, text="INICIAR VIAJE", width=320, height=60, font=("Helvetica", 20, "bold"), 
+                                  corner_radius=12, command=self.do_login, fg_color="#0284c7", hover_color="#0369a1")
+        btn_login.place(relx=0.5, y=380, anchor=tk.CENTER)
 
     def do_login(self):
         username = self.entry_user.get()
@@ -123,26 +119,35 @@ class CopIAEdgeApp:
         for widget in self.root.winfo_children():
             widget.destroy()
             
-        frame = tk.Frame(self.root, bg="#1e293b", padx=50, pady=50)
+        frame = ctk.CTkFrame(master=self.root, width=550, height=450, corner_radius=20, fg_color="#1e293b")
         frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         
-        tk.Label(frame, text=f"Hola, {self.conductor_nombre}", font=self.title_font, bg="#1e293b", fg="white").pack(pady=(0, 10))
-        tk.Label(frame, text="Selecciona tu destino actual", font=self.normal_font, bg="#1e293b", fg="#94a3b8").pack(pady=(0, 40))
+        lbl_welcome = ctk.CTkLabel(master=frame, text=f"Hola, {self.conductor_nombre}", font=("Helvetica", 28, "bold"), text_color="white")
+        lbl_welcome.place(relx=0.5, y=70, anchor=tk.CENTER)
         
-        # Combobox para rutas
+        lbl_sub = ctk.CTkLabel(master=frame, text="Selecciona tu destino actual para continuar", font=("Helvetica", 16), text_color="#94a3b8")
+        lbl_sub.place(relx=0.5, y=115, anchor=tk.CENTER)
+        
         rutas_nombres = [f"{r['origen']} -> {r['destino']}" for r in self.rutas_disponibles]
         
-        self.combo_rutas = ttk.Combobox(frame, values=rutas_nombres, font=self.normal_font, state="readonly", width=30)
-        self.combo_rutas.pack(pady=(5, 30))
+        self.combo_rutas = ctk.CTkComboBox(master=frame, values=rutas_nombres, width=380, height=50, font=("Helvetica", 18), 
+                                           dropdown_font=("Helvetica", 16), corner_radius=10, fg_color="#334155", button_color="#0284c7", border_color="#475569")
+        self.combo_rutas.place(relx=0.5, y=210, anchor=tk.CENTER)
+        
         if rutas_nombres:
-            self.combo_rutas.current(0)
+            self.combo_rutas.set(rutas_nombres[0])
             
-        btn_start = tk.Button(frame, text="CONFIRMAR E INICIAR VIAJE", font=self.btn_font, bg="#10b981", fg="white", 
-                              activebackground="#059669", activeforeground="white", command=self.start_trip_api, relief=tk.FLAT)
-        btn_start.pack(fill=tk.X, ipady=15)
+        btn_start = ctk.CTkButton(master=frame, text="CONFIRMAR E INICIAR VIAJE", width=380, height=60, font=("Helvetica", 18, "bold"), 
+                                  corner_radius=12, command=self.start_trip_api, fg_color="#10b981", hover_color="#059669")
+        btn_start.place(relx=0.5, y=340, anchor=tk.CENTER)
 
     def start_trip_api(self):
-        idx = self.combo_rutas.current()
+        # Encontrar índice de la ruta seleccionada
+        ruta_str = self.combo_rutas.get()
+        if not ruta_str:
+            return
+            
+        idx = next((i for i, r in enumerate(self.rutas_disponibles) if f"{r['origen']} -> {r['destino']}" == ruta_str), -1)
         if idx < 0:
             messagebox.showwarning("Aviso", "Selecciona una ruta válida")
             return
@@ -187,73 +192,75 @@ class CopIAEdgeApp:
         for widget in self.root.winfo_children():
             widget.destroy()
             
-        # Header
-        header = tk.Frame(self.root, bg="#1e293b", height=80)
+        # Header Moderno
+        header = ctk.CTkFrame(master=self.root, height=70, corner_radius=0, fg_color="#1e293b")
         header.pack(fill=tk.X, side=tk.TOP)
-        header.pack_propagate(False)
         
-        tk.Label(header, text=f"Buen viaje, {self.conductor_nombre}", font=self.normal_font, bg="#1e293b", fg="white").pack(side=tk.LEFT, padx=20, pady=20)
+        lbl_driver = ctk.CTkLabel(master=header, text=f"Vehículo Activo • Conductor: {self.conductor_nombre}", font=("Helvetica", 16, "bold"), text_color="white")
+        lbl_driver.pack(side=tk.LEFT, padx=20, pady=20)
         
-        btn_stop = tk.Button(header, text="FINALIZAR VIAJE", font=self.btn_font, bg="#e11d48", fg="white", 
-                             activebackground="#be123c", activeforeground="white", command=self.stop_trip, relief=tk.FLAT)
-        btn_stop.pack(side=tk.RIGHT, padx=20, pady=10, ipady=5, ipadx=10)
+        btn_stop = ctk.CTkButton(master=header, text="FINALIZAR VIAJE", width=150, height=40, font=("Helvetica", 14, "bold"), 
+                                 corner_radius=8, command=self.stop_trip, fg_color="#e11d48", hover_color="#be123c")
+        btn_stop.pack(side=tk.RIGHT, padx=20, pady=15)
 
-        # Body
-        body = tk.Frame(self.root, bg="#0f172a")
+        # Body - Dos columnas
+        body = ctk.CTkFrame(master=self.root, fg_color="#0f172a", corner_radius=0)
         body.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        # Izquierda: Video
-        left_panel = tk.Frame(body, bg="#1e293b", bd=2, relief=tk.RIDGE)
+        # Izquierda: Monitor de Video
+        left_panel = ctk.CTkFrame(master=body, corner_radius=15, fg_color="#1e293b", border_width=2, border_color="#334155")
         left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
         
         self.lbl_video = tk.Label(left_panel, bg="black")
-        self.lbl_video.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.lbl_video.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         
-        # Derecha: Estado
-        right_panel = tk.Frame(body, bg="#1e293b", width=350)
+        # Derecha: Panel de Telemetría
+        right_panel = ctk.CTkFrame(master=body, width=320, corner_radius=15, fg_color="#1e293b")
         right_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
         right_panel.pack_propagate(False)
         
-        tk.Label(right_panel, text="Estado CopIA", font=self.normal_font, bg="#1e293b", fg="#94a3b8").pack(pady=(20, 10))
+        lbl_status_title = ctk.CTkLabel(master=right_panel, text="Estado CopIA AI", font=("Helvetica", 14), text_color="#94a3b8")
+        lbl_status_title.pack(pady=(20, 5))
         
-        self.lbl_status_main = tk.Label(right_panel, text="INICIANDO...", font=self.title_font, bg="#1e293b", fg="white")
-        self.lbl_status_main.pack(pady=20)
+        self.lbl_status_main = ctk.CTkLabel(master=right_panel, text="INICIANDO...", font=("Helvetica", 32, "bold"), text_color="white")
+        self.lbl_status_main.pack(pady=(0, 30))
         
-        self.lbl_metrics = tk.Label(right_panel, text="Cargando métricas...", font=self.normal_font, bg="#1e293b", fg="white", justify=tk.LEFT)
-        self.lbl_metrics.pack(pady=20, anchor="w", padx=30)
+        # Grid de Métricas
+        metrics_frame = ctk.CTkFrame(master=right_panel, fg_color="transparent")
+        metrics_frame.pack(fill=tk.X, padx=20)
         
-        # Contenedor para botón de pánico
-        panic_frame = tk.Frame(right_panel, bg="#1e293b")
-        panic_frame.pack(pady=(20, 10), fill=tk.X, padx=20)
+        # EAR (Ojos)
+        self.lbl_ear = ctk.CTkLabel(master=metrics_frame, text="EAR (Ojos): 0.000", font=("Consolas", 16), text_color="white")
+        self.lbl_ear.pack(anchor="w", pady=5)
+        # MAR (Boca)
+        self.lbl_mar = ctk.CTkLabel(master=metrics_frame, text="MAR (Boca): 0.000", font=("Consolas", 16), text_color="white")
+        self.lbl_mar.pack(anchor="w", pady=5)
+        # PITCH (Cabeza)
+        self.lbl_pitch = ctk.CTkLabel(master=metrics_frame, text="Inclinación: 0.0°", font=("Consolas", 16), text_color="white")
+        self.lbl_pitch.pack(anchor="w", pady=5)
+        # RIESGO
+        self.lbl_risk = ctk.CTkLabel(master=metrics_frame, text="Riesgo: 0%", font=("Helvetica", 18, "bold"), text_color="#38bdf8")
+        self.lbl_risk.pack(anchor="w", pady=(15, 0))
         
-        self.canvas_panic = tk.Canvas(panic_frame, width=120, height=120, bg="#1e293b", highlightthickness=0)
-        self.canvas_panic.pack(pady=5)
+        # Botón de Pánico
+        panic_btn = ctk.CTkButton(master=right_panel, text="🚨 S.O.S", width=250, height=80, font=("Helvetica", 32, "bold"),
+                                  corner_radius=40, fg_color="#dc2626", hover_color="#991b1b", command=self.send_panic)
+        panic_btn.pack(side=tk.BOTTOM, pady=(0, 40))
         
-        self.circle_id = self.canvas_panic.create_oval(10, 10, 110, 110, fill="#dc2626", outline="#991b1b", width=3)
-        self.text_id = self.canvas_panic.create_text(60, 60, text="🚨\nS.O.S", fill="white", font=("Helvetica", 16, "bold"), justify=tk.CENTER)
-        
-        self.canvas_panic.tag_bind(self.circle_id, "<Button-1>", self.on_panic_click)
-        self.canvas_panic.tag_bind(self.text_id, "<Button-1>", self.on_panic_click)
-        
-        lbl_panic_desc = tk.Label(panic_frame, text="presionar en caso de robos", font=("Helvetica", 11, "italic"), bg="#1e293b", fg="#94a3b8")
-        lbl_panic_desc.pack()
+        lbl_panic_desc = ctk.CTkLabel(master=right_panel, text="Emergencia (Asalto/Robo)", font=("Helvetica", 12), text_color="#94a3b8")
+        lbl_panic_desc.pack(side=tk.BOTTOM, pady=(0, 10))
         
         # Iniciar hilos
         self.is_running = True
         self.start_copia()
         
-    def on_panic_click(self, event):
-        self.canvas_panic.itemconfig(self.circle_id, fill="#991b1b")
-        self.root.after(200, lambda: self.canvas_panic.itemconfig(self.circle_id, fill="#dc2626"))
-        self.send_panic()
-
     def send_panic(self):
         try:
             response = requests.post(f"{SERVER_URL}/api/trip/panic", json={
                 "conductor_id": self.conductor_id
             }, timeout=3.0)
             if response.status_code == 200:
-                messagebox.showinfo("Alerta de Robo Enviada", "Se ha enviado una alerta de ROBO/ASALTO a la central.\nTu posición GPS actual está siendo rastreada.")
+                messagebox.showinfo("Alerta S.O.S", "Alerta de ROBO/ASALTO enviada a la central.\nRastreo GPS en tiempo real activado.")
             else:
                 messagebox.showerror("Error", "No se pudo enviar la alerta de pánico.")
         except:
@@ -314,7 +321,6 @@ class CopIAEdgeApp:
                 payload = self.latest_payload
                 self.latest_payload = None
                 
-                # Encolar si hay alerta crítica
                 is_critical = payload["log_data"].get("alert_level", 0) > 0 or payload["log_data"].get("event_type") in ["PÁNICO_EMERGENCIA", "ROBO_ASALTO"]
                 if is_critical:
                     telemetry_queue.append(payload)
@@ -347,13 +353,15 @@ class CopIAEdgeApp:
             return
             
         if self.latest_frame is not None:
-            # Actualizar Video
-            img = Image.fromarray(self.latest_frame)
-            # Redimensionar para que encaje en el panel izquierdo (ej. 600x400)
-            img = img.resize((600, 450), Image.LANCZOS)
-            imgtk = ImageTk.PhotoImage(image=img)
-            self.lbl_video.imgtk = imgtk
-            self.lbl_video.configure(image=imgtk)
+            try:
+                img = Image.fromarray(self.latest_frame)
+                # Redimensionar para que encaje
+                img = img.resize((660, 480), Image.LANCZOS)
+                imgtk = ImageTk.PhotoImage(image=img)
+                self.lbl_video.imgtk = imgtk
+                self.lbl_video.configure(image=imgtk)
+            except Exception as e:
+                pass
             
         if self.latest_log_data is not None:
             # Actualizar Estado y Métricas
@@ -374,13 +382,16 @@ class CopIAEdgeApp:
                 color = "#ef4444" # Red
                 text = event
                 
-            self.lbl_status_main.config(text=text, fg=color)
+            self.lbl_status_main.configure(text=text, text_color=color)
             
-            metrics_str = f"Riesgo: {risk:.1f}\n\n"
-            metrics_str += f"Ojos (EAR): {data.get('ear', 0):.3f}\n"
-            metrics_str += f"Boca (MAR): {data.get('mar', 0):.3f}\n"
-            metrics_str += f"Inclinación: {data.get('pitch', 0):.1f}"
-            self.lbl_metrics.config(text=metrics_str)
+            self.lbl_ear.configure(text=f"EAR (Ojos): {data.get('ear', 0):.3f}")
+            self.lbl_mar.configure(text=f"MAR (Boca): {data.get('mar', 0):.3f}")
+            self.lbl_pitch.configure(text=f"Inclinación: {data.get('pitch', 0):.1f}°")
+            
+            risk_color = "#38bdf8"
+            if risk > 50:
+                risk_color = "#ef4444"
+            self.lbl_risk.configure(text=f"Riesgo Actual: {risk:.0f}%", text_color=risk_color)
             
         self.root.after(30, self.update_ui_loop) # Actualizar a ~30 FPS
 
@@ -393,6 +404,6 @@ class CopIAEdgeApp:
         self.show_login_screen()
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    root = ctk.CTk()
     app = CopIAEdgeApp(root)
     root.mainloop()
