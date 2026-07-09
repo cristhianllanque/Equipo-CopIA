@@ -41,6 +41,7 @@ class CopIAEdgeApp:
         self.sesion_id = None
         self.ruta_id = None
         self.rutas_disponibles = []
+        self.selected_camera = 0
         
         # IA y Cámara
         self.system = None
@@ -119,33 +120,50 @@ class CopIAEdgeApp:
         for widget in self.root.winfo_children():
             widget.destroy()
             
-        frame = ctk.CTkFrame(master=self.root, width=550, height=450, corner_radius=20, fg_color="#1e293b")
+        frame = ctk.CTkFrame(master=self.root, width=550, height=480, corner_radius=20, fg_color="#1e293b")
         frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         
         lbl_welcome = ctk.CTkLabel(master=frame, text=f"Hola, {self.conductor_nombre}", font=("Helvetica", 28, "bold"), text_color="white")
-        lbl_welcome.place(relx=0.5, y=70, anchor=tk.CENTER)
+        lbl_welcome.place(relx=0.5, y=50, anchor=tk.CENTER)
         
         lbl_sub = ctk.CTkLabel(master=frame, text="Selecciona tu destino actual para continuar", font=("Helvetica", 16), text_color="#94a3b8")
-        lbl_sub.place(relx=0.5, y=115, anchor=tk.CENTER)
+        lbl_sub.place(relx=0.5, y=95, anchor=tk.CENTER)
         
         rutas_nombres = [f"{r['origen']} -> {r['destino']}" for r in self.rutas_disponibles]
         
         self.combo_rutas = ctk.CTkComboBox(master=frame, values=rutas_nombres, width=380, height=50, font=("Helvetica", 18), 
                                            dropdown_font=("Helvetica", 16), corner_radius=10, fg_color="#334155", button_color="#0284c7", border_color="#475569")
-        self.combo_rutas.place(relx=0.5, y=210, anchor=tk.CENTER)
+        self.combo_rutas.place(relx=0.5, y=170, anchor=tk.CENTER)
         
         if rutas_nombres:
             self.combo_rutas.set(rutas_nombres[0])
             
+        lbl_cam = ctk.CTkLabel(master=frame, text="Cámara de Monitoreo:", font=("Helvetica", 16), text_color="#94a3b8")
+        lbl_cam.place(relx=0.5, y=240, anchor=tk.CENTER)
+        
+        camaras_disponibles = ["Cámara 0 (Integrada)", "Cámara 1 (Externa USB)", "Cámara 2", "Cámara 3"]
+        self.combo_cam = ctk.CTkComboBox(master=frame, values=camaras_disponibles, width=380, height=50, font=("Helvetica", 16), 
+                                         dropdown_font=("Helvetica", 14), corner_radius=10, fg_color="#334155", button_color="#10b981", border_color="#475569")
+        self.combo_cam.place(relx=0.5, y=285, anchor=tk.CENTER)
+        self.combo_cam.set("Cámara 0 (Integrada)")
+            
         btn_start = ctk.CTkButton(master=frame, text="CONFIRMAR E INICIAR VIAJE", width=380, height=60, font=("Helvetica", 18, "bold"), 
                                   corner_radius=12, command=self.start_trip_api, fg_color="#10b981", hover_color="#059669")
-        btn_start.place(relx=0.5, y=340, anchor=tk.CENTER)
+        btn_start.place(relx=0.5, y=390, anchor=tk.CENTER)
 
     def start_trip_api(self):
         # Encontrar índice de la ruta seleccionada
         ruta_str = self.combo_rutas.get()
         if not ruta_str:
             return
+            
+        # Extraer índice de cámara seleccionada
+        cam_str = getattr(self, "combo_cam", None)
+        if cam_str:
+            try:
+                self.selected_camera = int(cam_str.get().split(" ")[1])
+            except Exception:
+                self.selected_camera = 0
             
         idx = next((i for i, r in enumerate(self.rutas_disponibles) if f"{r['origen']} -> {r['destino']}" == ruta_str), -1)
         if idx < 0:
@@ -269,7 +287,7 @@ class CopIAEdgeApp:
     def start_copia(self):
         logging.info("Inicializando Motor de IA CopIA...")
         self.system = CopIASystem("config/copia_config.yaml", edge_mode=True)
-        camera_index = self.system.config.get("camera_index", 1)
+        camera_index = getattr(self, "selected_camera", 0)
         
         self.cap = cv2.VideoCapture(camera_index)
         if not self.cap.isOpened():
