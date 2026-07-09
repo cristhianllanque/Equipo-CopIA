@@ -5,11 +5,11 @@
 cd "$(dirname "$0")/.."
 
 echo "Iniciando CopIA Edge Monitor..."
-echo "Buscando actualizaciones en la nube..."
-git pull origin main || echo "No se pudo conectar a GitHub, iniciando versión actual..."
-
-# Activar entorno virtual
+echo "Comprobando actualizaciones OTA..."
+# El entorno virtual debe estar activo para Python y customtkinter
 source venv/bin/activate
+
+python scripts/updater_gui.py
 
 # Ejecutar aplicación
 python raspberry_gui.py
