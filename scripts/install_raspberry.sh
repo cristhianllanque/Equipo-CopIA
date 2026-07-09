@@ -51,11 +51,11 @@ cat <<EOF > "$SHORTCUT"
 Version=1.0
 Name=CopIA Edge Monitor
 Comment=Asistente de Conducción AI
-Exec=xterm -e "bash '$PROJECT_ROOT/scripts/start_copia.sh'"
+Exec=bash -c "$PROJECT_ROOT/scripts/start_copia.sh"
 Icon=$PROJECT_ROOT/Frontend/public/logoCopAI.png
-Terminal=false
+Terminal=true
 Type=Application
-Categories=Utility;Application;
+Categories=Utility;
 EOF
 
 chmod +x "$SHORTCUT"
