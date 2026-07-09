@@ -51,7 +51,7 @@ cat <<EOF > "$SHORTCUT"
 Version=1.0
 Name=CopIA Edge Monitor
 Comment=Asistente de Conducción AI
-Exec=bash -c "$PROJECT_ROOT/scripts/start_copia.sh"
+Exec=/bin/bash "$PROJECT_ROOT/scripts/start_copia.sh"
 Icon=$PROJECT_ROOT/Frontend/public/logoCopAI.png
 Terminal=true
 Type=Application
