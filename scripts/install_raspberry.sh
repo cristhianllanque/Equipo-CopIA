@@ -26,14 +26,19 @@ echo "3. Creando entorno virtual de Python..."
 cd "$(dirname "$0")/.." # Ir a la raíz del proyecto
 PROJECT_ROOT=$(pwd)
 
-python3 -m venv venv
-source venv/bin/activate
+echo "4. Instalando Entorno Virtual Profesional (Python 3.11)..."
+# Descargar e instalar Miniforge silenciosamente para garantizar compatibilidad con librerías de IA
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh"
+bash Miniforge3-Linux-aarch64.sh -b -p $HOME/miniforge3
+rm Miniforge3-Linux-aarch64.sh
 
-echo "4. Instalando librerías de Python (esto puede tardar unos minutos)..."
-pip install -r requirements.txt
+# Activar Conda y crear entorno
+source $HOME/miniforge3/bin/activate
+conda create -n copia_env python=3.11 -y
+conda activate copia_env
 
-echo ""
-echo "5. Configurando la conexión (.env)..."
+echo "5. Instalando librerías gráficas, de IA y de Voz..."
+pip install customtkinter opencv-python mediapipe pygame requests python-dotenv gtts SpeechRecognition sqlalchemy pymysql numpy pyyaml pillow
 echo "SERVER_URL=$SERVER_URL" > .env
 echo "Configuración guardada en .env"
 
