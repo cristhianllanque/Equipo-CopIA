@@ -5,6 +5,8 @@
 cd "$(dirname "$0")/.."
 
 echo "Iniciando CopIA Edge Monitor..."
+echo "Buscando actualizaciones en la nube..."
+git pull origin main || echo "No se pudo conectar a GitHub, iniciando versión actual..."
 
 # Activar entorno virtual
 source venv/bin/activate
