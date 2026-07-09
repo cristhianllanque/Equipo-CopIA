@@ -6,8 +6,13 @@ cd "$(dirname "$0")/.."
 
 echo "Iniciando CopIA Edge Monitor..."
 echo "Comprobando actualizaciones OTA..."
+
 # El entorno virtual debe estar activo para Python y customtkinter
-source venv/bin/activate
+if [ -d "$HOME/miniforge3/envs/copia_env" ]; then
+    source $HOME/miniforge3/bin/activate copia_env
+elif [ -d "venv" ]; then
+    source venv/bin/activate
+fi
 
 python scripts/updater_gui.py
 
