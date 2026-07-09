@@ -38,7 +38,7 @@ conda create -n copia_env python=3.11 -y
 conda activate copia_env
 
 echo "5. Instalando librerías gráficas, de IA y de Voz..."
-pip install customtkinter opencv-python mediapipe pygame requests python-dotenv gtts SpeechRecognition sqlalchemy pymysql numpy pyyaml pillow
+pip install customtkinter opencv-python mediapipe pygame requests python-dotenv gtts SpeechRecognition sqlalchemy pymysql numpy pyyaml pillow pytz
 echo "SERVER_URL=$SERVER_URL" > .env
 echo "Configuración guardada en .env"
 
